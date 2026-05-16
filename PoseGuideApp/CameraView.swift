@@ -7,6 +7,7 @@ struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     @State private var overlayOpacity = 0.35
     @State private var isShowingCapturePreview = false
+    @State private var isShowingSettings = false
 
     var body: some View {
         ZStack {
@@ -20,6 +21,12 @@ struct CameraView: View {
 
                 scrims
 
+                if viewModel.settings.grid {
+                    CameraGridOverlay()
+                        .padding(.horizontal, 12)
+                        .allowsHitTesting(false)
+                }
+
                 Image(uiImage: sampleImage)
                     .resizable()
                     .scaledToFit()
@@ -28,6 +35,10 @@ struct CameraView: View {
                     .allowsHitTesting(false)
 
                 controls
+
+                if let timerCountdown = viewModel.timerCountdown {
+                    countdownView(timerCountdown)
+                }
             }
         }
         .task {
@@ -63,7 +74,7 @@ struct CameraView: View {
                 .frame(height: 180)
             Spacer()
             PoseGuideTheme.cameraBottomScrim
-                .frame(height: 300)
+                .frame(height: isShowingSettings ? 540 : 300)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
@@ -77,10 +88,18 @@ struct CameraView: View {
 
             Spacer()
 
-            bottomPanel
-                .padding(.horizontal, 20)
-                .padding(.bottom, 28)
+            VStack(spacing: 12) {
+                if isShowingSettings {
+                    CameraSettingsPanel(viewModel: viewModel)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                bottomPanel
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 28)
         }
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: isShowingSettings)
     }
 
     private var topBar: some View {
@@ -96,7 +115,7 @@ struct CameraView: View {
                 Text("Camera")
                     .font(.headline.bold())
                     .foregroundStyle(.white)
-                Text(viewModel.isSessionReady ? "Overlay đang bật" : "Đang khởi tạo")
+                Text(statusText)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.white.opacity(0.72))
             }
@@ -107,12 +126,25 @@ struct CameraView: View {
             Spacer()
 
             Button {
+                isShowingSettings.toggle()
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .buttonStyle(CircularGlassButtonStyle())
+
+            Button {
                 viewModel.switchCamera()
             } label: {
                 Image(systemName: "camera.rotate")
             }
             .buttonStyle(CircularGlassButtonStyle())
         }
+    }
+
+    private var statusText: String {
+        let timer = viewModel.settings.timer == .off ? "" : " • \(viewModel.settings.timer.rawValue)"
+        let grid = viewModel.settings.grid ? " • Lưới" : ""
+        return viewModel.isSessionReady ? "Overlay đang bật\(timer)\(grid)" : "Đang khởi tạo"
     }
 
     private var bottomPanel: some View {
@@ -125,7 +157,7 @@ struct CameraView: View {
                 Spacer()
 
                 Button {
-                    viewModel.capturePhoto()
+                    viewModel.captureWithTimer()
                 } label: {
                     ZStack {
                         Circle()
@@ -140,13 +172,14 @@ struct CameraView: View {
                     }
                 }
                 .accessibilityLabel("Chụp ảnh")
+                .disabled(viewModel.timerCountdown != nil)
 
                 Spacer()
 
                 VStack(spacing: 5) {
-                    Image(systemName: "figure.stand")
+                    Image(systemName: viewModel.settings.flash == .off ? "bolt.slash" : "bolt.fill")
                         .font(.title3)
-                    Text("Pose")
+                    Text(String(format: "%.1fx", viewModel.settings.zoom))
                         .font(.caption2.weight(.bold))
                 }
                 .foregroundStyle(.white)
@@ -168,6 +201,18 @@ struct CameraView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(.white.opacity(0.34), lineWidth: 1)
             }
+    }
+
+    private func countdownView(_ value: Int) -> some View {
+        Text("\(value)")
+            .font(.system(size: 92, weight: .black, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(width: 150, height: 150)
+            .background(.black.opacity(0.28), in: Circle())
+            .overlay {
+                Circle().stroke(.white.opacity(0.32), lineWidth: 2)
+            }
+            .transition(.scale.combined(with: .opacity))
     }
 
     private var permissionView: some View {
@@ -214,5 +259,27 @@ struct CameraView: View {
             .glassCard(cornerRadius: 32)
             .padding(24)
         }
+    }
+}
+
+struct CameraGridOverlay: View {
+    var body: some View {
+        GeometryReader { proxy in
+            Path { path in
+                let width = proxy.size.width
+                let height = proxy.size.height
+                for index in 1...2 {
+                    let x = width * CGFloat(index) / 3
+                    path.move(to: CGPoint(x: x, y: 0))
+                    path.addLine(to: CGPoint(x: x, y: height))
+
+                    let y = height * CGFloat(index) / 3
+                    path.move(to: CGPoint(x: 0, y: y))
+                    path.addLine(to: CGPoint(x: width, y: y))
+                }
+            }
+            .stroke(.white.opacity(0.42), lineWidth: 1)
+        }
+        .ignoresSafeArea()
     }
 }

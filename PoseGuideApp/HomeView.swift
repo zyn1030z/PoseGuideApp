@@ -4,7 +4,9 @@ import SwiftUI
 struct HomeView: View {
     @State private var selectedItem: PhotosPickerItem?
     @State private var sampleImage: UIImage?
+    @State private var pendingEditImage: UIImage?
     @State private var isShowingCamera = false
+    @State private var isShowingEditor = false
 
     var body: some View {
         NavigationStack {
@@ -31,6 +33,16 @@ struct HomeView: View {
                 if let sampleImage {
                     CameraView(sampleImage: sampleImage)
                         .navigationBarBackButtonHidden()
+                }
+            }
+            .fullScreenCover(isPresented: $isShowingEditor) {
+                ImageEditorView(sourceImage: pendingEditImage ?? sampleImage ?? UIImage()) {
+                    isShowingEditor = false
+                    pendingEditImage = nil
+                } onDone: { edited in
+                    sampleImage = edited
+                    pendingEditImage = nil
+                    isShowingEditor = false
                 }
             }
             .task(id: selectedItem) {
@@ -135,6 +147,19 @@ struct HomeView: View {
                     }
                 }
             }
+
+            if sampleImage != nil {
+                Button {
+                    pendingEditImage = sampleImage
+                    DispatchQueue.main.async {
+                        isShowingEditor = true
+                    }
+                } label: {
+                    Label("Chỉnh crop/rotate", systemImage: "crop.rotate")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(SecondaryGlassButtonStyle())
+            }
         }
         .padding(18)
         .glassCard(cornerRadius: 32)
@@ -164,6 +189,8 @@ struct HomeView: View {
         guard let selectedItem else { return }
         guard let data = try? await selectedItem.loadTransferable(type: Data.self), let image = UIImage(data: data) else { return }
         sampleImage = image
+        pendingEditImage = nil
+        isShowingEditor = false
     }
 }
 
